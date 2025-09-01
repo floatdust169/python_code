@@ -1,0 +1,1196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI智能知识库检索系统</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#165DFF',
+            secondary: '#36CFC9',
+            accent: '#722ED1',
+            neutral: '#F2F3F5',
+            'neutral-dark': '#4E5969',
+            success: '#52C41A',
+            warning: '#FAAD14',
+            danger: '#FF4D4F',
+          },
+          fontFamily: {
+            inter: ['Inter', 'system-ui', 'sans-serif'],
+          },
+        },
+      }
+    }
+  </script>
+
+  <style type="text/tailwindcss">
+    @layer utilities {
+      .content-auto {
+        content-visibility: auto;
+      }
+      .scrollbar-hide {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
+      .scrollbar-hide::-webkit-scrollbar {
+        display: none;
+      }
+      .message-bubble-left {
+        border-radius: 18px 18px 18px 0;
+      }
+      .message-bubble-right {
+        border-radius: 18px 18px 0 18px;
+      }
+      .hover-lift {
+        transition: transform 0.2s, box-shadow 0.2s;
+      }
+      .hover-lift:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      }
+      .loading-shimmer {
+        background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+        background-size: 200% 100%;
+        animation: shimmer 1.5s infinite;
+      }
+      @keyframes shimmer {
+        0% { background-position: -200% 0; }
+        100% { background-position: 200% 0; }
+      }
+    }
+  </style>
+</head>
+
+<body class="font-inter bg-gray-50 text-gray-800 min-h-screen flex flex-col">
+  <header class="bg-white shadow-sm sticky top-0 z-40">
+    <div class="container mx-auto px-4 py-3 flex items-center justify-center">
+      <div class="flex items-center space-x-2">
+        <i class="fa fa-database text-primary text-2xl"></i>
+        <h1 class="text-xl md:text-2xl font-bold text-primary">AI智能知识库检索系统</h1>
+      </div>
+    </div>
+  </header>
+
+  <!-- 通知提示框 -->
+  <div id="notification"
+    class="fixed top-16 right-4 bg-white shadow-lg rounded-lg p-4 transform translate-x-full transition-transform duration-300 flex items-center z-50 max-w-xs">
+    <i id="notificationIcon" class="fa fa-check-circle text-success text-xl mr-3"></i>
+    <div>
+      <h4 id="notificationTitle" class="font-medium text-gray-800">操作成功</h4>
+      <p id="notificationMessage" class="text-sm text-gray-500">知识库已添加</p>
+    </div>
+    <button id="closeNotification" class="ml-4 text-gray-400 hover:text-gray-600">
+      <i class="fa fa-times"></i>
+    </button>
+  </div>
+
+  <!-- 加载提示框 -->
+  <div id="loadingModal" class="fixed inset-0 bg-black/30 z-50 flex items-center justify-center hidden">
+    <div class="bg-white rounded-xl shadow-lg p-5 flex items-center">
+      <div class="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary mr-3"></div>
+      <p id="loadingText" class="text-gray-700">正在处理...</p>
+    </div>
+  </div>
+
+  <!-- 添加知识库弹窗 -->
+  <div id="addKnowledgeModal" class="fixed inset-0 bg-black/30 z-50 flex items-center justify-center hidden">
+    <div id="modalContent"
+      class="bg-white rounded-xl shadow-lg w-full max-w-md mx-4 transform scale-95 opacity-0 transition-all duration-300">
+      <div class="p-5 border-b border-gray-100">
+        <h3 class="text-lg font-semibold">添加新知识库</h3>
+      </div>
+      <div class="p-5">
+        <div class="mb-4">
+          <label for="knowledgeName" class="block text-sm font-medium text-gray-700 mb-1">知识库名称 <span
+              class="text-danger">*</span></label>
+          <input type="text" id="knowledgeName"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary"
+            placeholder="输入知识库名称">
+          <p id="nameError" class="mt-1 text-sm text-danger hidden">请输入知识库名称</p>
+        </div>
+        <div class="mb-4">
+          <label for="knowledgeDesc" class="block text-sm font-medium text-gray-700 mb-1">知识库描述</label>
+          <textarea id="knowledgeDesc" rows="3"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary"
+            placeholder="输入知识库描述（可选）"></textarea>
+        </div>
+        <div class="mb-5">
+          <label for="knowledgePrompt" class="block text-sm font-medium text-gray-700 mb-1">AI提示词</label>
+          <textarea id="knowledgePrompt" rows="4"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm"
+            placeholder="设置AI助手的角色和回答风格，例如：你是一个专业的技术文档助手，请基于文档内容准确回答用户问题...">你是一个专业的知识库助手，请根据提供的文档内容回答用户的问题。</textarea>
+          <div class="flex justify-between items-center mt-1">
+            <span class="text-xs text-gray-400">
+              <span id="addPromptCharCount">48</span> / 500字符
+            </span>
+          </div>
+        </div>
+      </div>
+      <div class="p-4 bg-gray-50 rounded-b-xl flex justify-end space-x-3">
+        <button id="cancelCreateBtn"
+          class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">取消</button>
+        <button id="createKnowledgeBtn"
+          class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors">创建</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 删除确认弹窗 -->
+  <div id="deleteConfirmModal" class="fixed inset-0 bg-black/30 z-50 flex items-center justify-center hidden">
+    <div id="deleteModalContent"
+      class="bg-white rounded-xl shadow-lg w-full max-w-md mx-4 transform scale-95 opacity-0 transition-all duration-300">
+      <div class="p-5 border-b border-gray-100">
+        <h3 class="text-lg font-semibold text-danger flex items-center">
+          <i class="fa fa-exclamation-circle mr-2"></i>确认删除
+        </h3>
+      </div>
+      <div class="p-5">
+        <p class="text-gray-700 mb-4">您确定要删除知识库 <span id="deleteKnowledgeName" class="font-medium"></span> 吗？</p>
+        <p class="text-sm text-gray-500">删除后，该知识库中的所有文档将被永久删除，不可恢复。</p>
+      </div>
+      <div class="p-4 bg-gray-50 rounded-b-xl flex justify-end space-x-3">
+        <button id="cancelDeleteBtn"
+          class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">取消</button>
+        <button id="confirmDeleteBtn"
+          class="px-4 py-2 bg-danger text-white rounded-lg hover:bg-danger/90 transition-colors">确认删除</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 主内容区 -->
+  <main class="flex-grow container mx-auto px-4 py-6 flex flex-col md:flex-row gap-6">
+
+    <!-- 左侧知识库选择面板 -->
+    <div class="md:w-64 lg:w-72 flex-shrink-0">
+      <div class="bg-white rounded-xl shadow-sm p-4 sticky top-20">
+        <h2 class="text-lg font-semibold mb-3 flex items-center">
+          <i class="fa fa-folder-open text-primary mr-2"></i>知识库列表
+        </h2>
+
+        <div class="mb-3">
+          <button id="addKnowledgeBtn"
+            class="w-full flex items-center justify-center bg-primary text-white py-2 px-3 rounded-lg hover:bg-primary/90 transition-all text-sm hover-lift">
+            <i class="fa fa-plus mr-2"></i>添加知识库
+          </button>
+        </div>
+
+        <!-- 初始空白状态提示 -->
+        <div id="emptyKnowledgeState" class="py-8 text-center">
+          <i class="fa fa-folder-o text-gray-300 text-4xl mb-3"></i>
+          <p class="text-gray-500 text-sm">暂无知识库</p>
+          <p class="text-gray-400 text-xs mt-1">点击"添加知识库"开始创建</p>
+        </div>
+
+        <!-- 加载状态 -->
+        <div id="knowledgeLoadingState" class="py-8 text-center hidden">
+          <div class="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary mx-auto mb-3"></div>
+          <p class="text-gray-500 text-sm">加载知识库中...</p>
+        </div>
+
+        <!-- 文件上传区域 -->
+        <div id="fileUploadArea" class="mb-4 hidden">
+          <h3 class="text-xs text-gray-500 mb-2 px-3">可上传文档至当前知识库</h3>
+          <div id="dropArea"
+            class="border-2 border-dashed border-gray-300 rounded-lg p-3 text-center hover:border-primary transition-colors cursor-pointer bg-gray-50 text-sm">
+            <i class="fa fa-upload text-primary mr-1"></i>
+            <span class="text-primary">上传文档</span>
+            <input type="file" id="fileInput" class="hidden" multiple accept=".pdf,.doc,.docx,.txt">
+          </div>
+        </div>
+
+        <!-- 知识库列表 -->
+        <div id="knowledgeBasesList"
+          class="space-y-1 max-h-[calc(100vh-480px)] overflow-y-auto scrollbar-hide pr-2 hidden">
+          <!-- 知识库选项将通过JavaScript动态生成 -->
+        </div>
+
+        <!-- 提示词设置区域 -->
+        <div id="promptSettingsArea" class="mt-4 hidden">
+          <div class="border-t border-gray-200 pt-4">
+            <h3 class="text-sm font-semibold text-gray-700 mb-2 flex items-center">
+              <i class="fa fa-magic text-secondary mr-2"></i>AI 提示词设置
+            </h3>
+            <div class="bg-gray-50 rounded-lg p-3">
+              <div class="text-xs text-gray-600 mb-2" id="currentKnowledgePromptLabel">
+                当前知识库：<span class="font-medium"></span>
+              </div>
+              <textarea id="promptTextarea" 
+                placeholder="设置AI助手的角色和回答风格，例如：你是一个专业的技术文档助手，请基于文档内容准确回答用户问题..."
+                class="w-full px-3 py-2 text-xs border border-gray-200 rounded-md focus:border-secondary focus:ring-1 focus:ring-secondary/20 outline-none resize-none"
+                rows="4"></textarea>
+              <div class="flex justify-between items-center mt-2">
+                <span class="text-xs text-gray-400">
+                  <span id="promptCharCount">0</span> / 500字符
+                </span>
+                <div class="space-x-2">
+                  <button id="resetPromptBtn" 
+                    class="text-xs px-2 py-1 text-gray-600 hover:text-gray-800 transition-colors">
+                    重置
+                  </button>
+                  <button id="savePromptBtn" 
+                    class="text-xs px-3 py-1 bg-secondary text-white rounded-md hover:bg-secondary/90 transition-colors">
+                    保存
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右侧对话内容区域 -->
+    <div class="flex-grow flex flex-col max-h-[calc(100vh-64px)]">
+      <!-- 对话消息区域 -->
+      <div id="messagesContainer" class="flex-grow overflow-y-auto p-2 scrollbar-hide">
+        <!-- 初始欢迎消息（无知识库状态） -->
+        <div id="initialWelcomeMessage" class="flex items-start mb-6 mt-2">
+          <div class="flex-shrink-0 w-8 h-8 rounded-full overflow-hidden">
+            <img src="pic/Book.png" alt="智能助手" class="w-full h-full object-cover">
+          </div>
+          <div class="ml-3 max-w-[85%]">
+            <div class="bg-primary/10 p-4 message-bubble-left">
+              <p class="text-gray-800">您好！我是智能知识库检索助手。</p>
+              <p class="mt-2 text-gray-700">您当前还没有创建任何知识库，请先点击左侧的"添加知识库"按钮创建您的第一个知识库，然后就可以上传文档并进行检索查询了。</p>
+            </div>
+            <span class="text-xs text-gray-400 ml-3 mt-1 block">系统</span>
+          </div>
+        </div>
+
+        <!-- 有知识库时的欢迎消息 -->
+        <div id="knowledgeWelcomeMessage" class="flex items-start mb-6 mt-2 hidden">
+          <div class="flex-shrink-0 w-8 h-8 rounded-full overflow-hidden">
+            <img src="pic/Book.png" alt="智能助手" class="w-full h-full object-cover">
+          </div>
+          <div class="ml-3 max-w-[85%]">
+            <div class="bg-primary/10 p-4 message-bubble-left">
+              <p class="text-gray-800">您好！我是智能知识库检索助手，您可以查询以下知识库的内容：</p>
+              <ul id="welcomeKnowledgeList" class="mt-2 ml-4 list-disc text-gray-700 text-sm">
+                <!-- 欢迎消息中的知识库列表将动态生成 -->
+              </ul>
+              <p class="mt-2 text-sm text-gray-600">请选择一个知识库，然后输入您的查询内容，我会为您找到相关信息。</p>
+            </div>
+            <span class="text-xs text-gray-400 ml-3 mt-1 block">系统</span>
+          </div>
+        </div>
+
+        <!-- 对话内容容器 -->
+        <div id="conversationContainer">
+          <!-- 对话内容会在这里动态添加 -->
+        </div>
+
+        <!-- 加载更多提示 -->
+        <div class="text-center py-4">
+          <button id="loadMoreBtn"
+            class="text-primary text-sm hover:text-primary/80 transition-colors flex items-center mx-auto hidden">
+            <i class="fa fa-history mr-1"></i> 加载更多历史
+          </button>
+        </div>
+      </div>
+
+      <!-- 搜索输入区域 -->
+      <div id="searchArea" class="bg-white rounded-xl shadow-sm p-4 mt-4 opacity-50 pointer-events-none">
+        <div class="relative">
+          <textarea id="searchInput" placeholder="请先创建并选择一个知识库..."
+            class="w-full px-4 py-3 pr-16 rounded-lg border border-gray-200 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all resize-none"
+            rows="2" disabled></textarea>
+          <div class="absolute right-3 bottom-3 flex items-center space-x-2">
+            <button id="clearBtn" class="text-gray-400 hover:text-gray-600 text-sm px-2 py-1 rounded hover:bg-gray-100 transition-all" title="清空内容">
+              <i class="fa fa-times"></i>
+            </button>
+            <span class="text-gray-400 text-sm">
+              <span id="charCount">0</span> / 500
+            </span>
+          </div>
+        </div>
+
+        <!-- 按钮区域和提示文本 -->
+        <div class="mt-3 flex justify-between items-center">
+          <div class="text-sm text-gray-500" id="currentKnowledge提示">
+            查找内容来自当前所选知识库
+          </div>
+
+          <button id="searchBtn"
+            class="bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary/90 transition-all transform hover:scale-[1.02] active:scale-[0.98] flex items-center"
+            disabled>
+            <span>发送</span>
+            <i class="fa fa-paper-plane ml-2"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // API基础地址 - 公网服务器
+    const API_BASE_URL = 'http://152.136.167.211:5000/api';
+
+    // 知识库数据 - 从后端获取
+    let knowledgeBases = [];
+
+    // 当前选中的知识库
+    let currentKnowledgeBase = null;
+
+    // 对话历史
+    let conversationHistory = [];
+
+    // 显示加载状态
+    function showLoading(text = "正在处理...") {
+      const loadingModal = document.getElementById('loadingModal');
+      const loadingText = document.getElementById('loadingText');
+      loadingText.textContent = text;
+      loadingModal.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+    }
+
+    // 隐藏加载状态
+    function hideLoading() {
+      const loadingModal = document.getElementById('loadingModal');
+      loadingModal.classList.add('hidden');
+      document.body.style.overflow = '';
+    }
+
+    // 封装API请求
+    async function apiRequest(url, method = 'GET', data = null, isFormData = false) {
+      const options = {
+        method,
+        headers: {},
+      };
+
+      // FormData不需要设置Content-Type，浏览器会自动处理
+      if (!isFormData) {
+        options.headers['Content-Type'] = 'application/json';
+      }
+
+      if (data) {
+        options.body = isFormData ? data : JSON.stringify(data);
+      }
+
+      try {
+        const response = await fetch(`${API_BASE_URL}${url}`, options);
+
+        // 处理非JSON响应
+        let result;
+        try {
+          result = await response.json();
+        } catch (e) {
+          result = { error: `服务器返回格式错误: ${e.message}` };
+        }
+
+        if (!response.ok) {
+          throw new Error(result.error || `请求失败 (${response.status})`);
+        }
+
+        return result;
+      } catch (err) {
+        console.error('API请求错误:', err);
+        showNotification('操作失败', err.message, 'error');
+        throw err;
+      }
+    }
+
+    // 从后端加载知识库
+    async function loadKnowledgeBases() {
+      try {
+        // 显示加载状态
+        document.getElementById('emptyKnowledgeState').classList.add('hidden');
+        document.getElementById('knowledgeBasesList').classList.add('hidden');
+        document.getElementById('knowledgeLoadingState').classList.remove('hidden');
+
+        // 调用API获取知识库列表
+        knowledgeBases = await apiRequest('/knowledge');
+
+        // 更新UI
+        renderKnowledgeBases();
+      } catch (err) {
+        console.error('加载知识库失败:', err);
+        document.getElementById('knowledgeLoadingState').classList.add('hidden');
+        document.getElementById('emptyKnowledgeState').classList.remove('hidden');
+      }
+    }
+
+    // 更新搜索框提示文字和当前知识库提示
+    function updateSearchPlaceholder() {
+      const searchInput = document.getElementById('searchInput');
+      const currentKnowledge提示 = document.getElementById('currentKnowledge提示');
+
+      // 当没有知识库时，显示初始提示
+      if (knowledgeBases.length === 0) {
+        searchInput.placeholder = "请先创建并选择一个知识库...";
+        currentKnowledge提示.textContent = "查找内容来自当前所选知识库";
+        return;
+      }
+
+      // 当有知识库但没有选中时，选中第一个并更新提示
+      if (!currentKnowledgeBase || !knowledgeBases.some(b => b._id === currentKnowledgeBase)) {
+        currentKnowledgeBase = knowledgeBases[0]._id;
+      }
+
+      // 当有选中的知识库时，显示对应的提示
+      const currentBase = knowledgeBases.find(b => b._id === currentKnowledgeBase);
+      if (currentBase) {
+        searchInput.placeholder = `在'${currentBase.name}'中查找`;
+        currentKnowledge提示.textContent = `查找内容来自当前所选'${currentBase.name}'库`;
+      }
+    }
+
+    // 更新欢迎消息中的知识库列表
+    function updateWelcomeKnowledgeList() {
+      const listContainer = document.getElementById('welcomeKnowledgeList');
+      listContainer.innerHTML = '';
+
+      knowledgeBases.forEach(base => {
+        const item = document.createElement('li');
+        item.textContent = base.name;
+        listContainer.appendChild(item);
+      });
+    }
+
+    // 渲染知识库列表
+    function renderKnowledgeBases() {
+      const listContainer = document.getElementById('knowledgeBasesList');
+      const emptyState = document.getElementById('emptyKnowledgeState');
+      const fileUploadArea = document.getElementById('fileUploadArea');
+      const searchArea = document.getElementById('searchArea');
+      const searchInput = document.getElementById('searchInput');
+      const searchBtn = document.getElementById('searchBtn');
+      const initialWelcome = document.getElementById('initialWelcomeMessage');
+      const knowledgeWelcome = document.getElementById('knowledgeWelcomeMessage');
+      const loadingState = document.getElementById('knowledgeLoadingState');
+      const currentKnowledge提示 = document.getElementById('currentKnowledge提示'); // 新增：获取提示文本元素
+
+      // 1. 先隐藏加载状态（无论成功失败都要隐藏）
+      loadingState.classList.add('hidden');
+
+      // 2. 强制更新提示文本（避免选中状态不同步）
+      updateSearchPlaceholder();
+
+      // 3. 根据数据长度判断显示状态（核心修复：确保有数据时显示列表）
+      if (knowledgeBases && knowledgeBases.length > 0) {
+        // ✅ 有知识库：显示列表 + 隐藏空状态 + 启用功能
+        listContainer.classList.remove('hidden'); // 显示列表容器
+        emptyState.classList.add('hidden');      // 隐藏空提示
+        fileUploadArea.classList.remove('hidden');// 显示文件上传区
+        initialWelcome.classList.add('hidden');  // 隐藏初始欢迎语
+        knowledgeWelcome.classList.remove('hidden');// 显示有库欢迎语
+        searchArea.classList.remove('opacity-50', 'pointer-events-none'); // 启用搜索区
+
+        // 启用搜索框相关功能
+        searchInput.disabled = false;
+        searchBtn.disabled = false;
+
+        // ✅ 更新欢迎消息中的知识库列表
+        updateWelcomeKnowledgeList();
+
+        // ✅ 确保有选中的知识库（如果没有，默认选中第一个）
+        if (!currentKnowledgeBase || !knowledgeBases.some(b => b._id === currentKnowledgeBase)) {
+          currentKnowledgeBase = knowledgeBases[0]._id;
+          // 同步更新提示文本（选中第一个后立即显示）
+          const firstBase = knowledgeBases[0];
+          currentKnowledge提示.textContent = `查找内容来自当前所选${firstBase.name}库`;
+        }
+
+        // ✅ 修复问题1：确保提示词设置组件在有知识库时显示
+        updatePromptSettings();
+
+        // ✅ 清空列表容器（避免重复渲染），重新渲染每个知识库项
+        listContainer.innerHTML = '';
+        knowledgeBases.forEach(base => {
+          // 创建单个知识库项的DOM
+          const item = document.createElement('div');
+          // 关键：选中状态的样式类要正确绑定（根据currentKnowledgeBase判断）
+          item.className = `flex items-center p-2 rounded-lg transition-colors ${base._id === currentKnowledgeBase ? 'bg-primary/10 text-primary' : 'hover:bg-neutral'
+            }`;
+          // 知识库项的内容（单选框 + 名称 + 按钮）
+          item.innerHTML = `
+        <input type="radio" name="knowledgeBase" value="${base._id}" 
+               class="mr-3 text-primary focus:ring-primary" 
+               ${base._id === currentKnowledgeBase ? 'checked' : ''}>
+        <span class="flex-grow truncate">${base.name}</span>
+        <!-- 详情按钮 -->
+        <button class="detail-knowledge-btn text-gray-400 hover:text-primary p-1 mr-1" 
+                data-id="${base._id}" title="查看详情">
+          👁️
+        </button>
+        <!-- 删除按钮 -->
+        <button class="delete-knowledge-btn text-gray-400 hover:text-danger p-1 ml-1" 
+                data-id="${base._id}" title="删除知识库">
+          🗑️
+        </button>
+      `;
+
+          // ✅ 绑定单选框切换事件（切换知识库时更新状态）
+          const radioBtn = item.querySelector('input');
+          radioBtn.addEventListener('change', (e) => {
+            if (e.target.checked && base._id !== currentKnowledgeBase) {
+              currentKnowledgeBase = base._id;
+              // 重新渲染列表（更新选中样式）
+              renderKnowledgeBases();
+              // 更新提示词设置
+              updatePromptSettings();
+              // 显示切换成功的通知
+              showNotification('已切换知识库', `当前知识库: ${base.name}`, 'info');
+            }
+          });
+
+          // 详情按钮事件（可选，不影响列表显示）
+          item.querySelector('.detail-knowledge-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            showNotification('提示', `知识库: ${base.name}\n描述: ${base.description || '无'}`, 'info');
+          });
+
+          // 删除按钮事件（可选，不影响列表显示）
+          item.querySelector('.delete-knowledge-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            openDeleteConfirmModal(base._id, base.name);
+          });
+
+          // ✅ 关键：将创建好的知识库项添加到列表容器中（之前可能漏了这步）
+          listContainer.appendChild(item);
+        });
+
+      } else {
+        // ❌ 无知识库：显示空状态 + 隐藏列表 + 禁用功能
+        listContainer.classList.add('hidden');
+        emptyState.classList.remove('hidden');
+        fileUploadArea.classList.add('hidden');
+        initialWelcome.classList.remove('hidden');
+        knowledgeWelcome.classList.add('hidden');
+        searchArea.classList.add('opacity-50', 'pointer-events-none');
+        searchInput.disabled = true;
+        searchBtn.disabled = true;
+      }
+    }
+
+    // 显示通知
+    function showNotification(title, message, type = 'success') {
+      const notification = document.getElementById('notification');
+      const notificationTitle = document.getElementById('notificationTitle');
+      const notificationMessage = document.getElementById('notificationMessage');
+      const notificationIcon = document.getElementById('notificationIcon');
+
+      notificationTitle.textContent = title;
+      notificationMessage.textContent = message;
+
+      notificationIcon.className = '';
+      if (type === 'success') {
+        notificationIcon.className = 'fa fa-check-circle text-success text-xl mr-3';
+      } else if (type === 'error') {
+        notificationIcon.className = 'fa fa-exclamation-circle text-danger text-xl mr-3';
+      } else if (type === 'warning') {
+        notificationIcon.className = 'fa fa-exclamation-triangle text-warning text-xl mr-3';
+      } else if (type === 'info') {
+        notificationIcon.className = 'fa fa-info-circle text-primary text-xl mr-3';
+      }
+
+      notification.classList.remove('translate-x-full');
+
+      // 点击关闭按钮
+      document.getElementById('closeNotification').onclick = hideNotification;
+    }
+
+    // 隐藏通知
+    function hideNotification() {
+      const notification = document.getElementById('notification');
+      notification.classList.add('translate-x-full');
+    }
+
+    // 打开删除确认弹窗
+    function openDeleteConfirmModal(id, name) {
+      const modal = document.getElementById('deleteConfirmModal');
+      const modalContent = document.getElementById('deleteModalContent');
+      const knowledgeNameEl = document.getElementById('deleteKnowledgeName');
+
+      knowledgeNameEl.textContent = name;
+      knowledgeNameEl.dataset.id = id;
+
+      modal.classList.remove('hidden');
+      setTimeout(() => {
+        modalContent.classList.remove('scale-95', 'opacity-0');
+        modalContent.classList.add('scale-100', 'opacity-100');
+      }, 10);
+
+      // 取消按钮事件
+      document.getElementById('cancelDeleteBtn').onclick = () => {
+        closeDeleteConfirmModal();
+      };
+    }
+
+    // 关闭删除确认弹窗
+    function closeDeleteConfirmModal() {
+      const modal = document.getElementById('deleteConfirmModal');
+      const modalContent = document.getElementById('deleteModalContent');
+
+      modalContent.classList.remove('scale-100', 'opacity-100');
+      modalContent.classList.add('scale-95', 'opacity-0');
+      setTimeout(() => {
+        modal.classList.add('hidden');
+      }, 300);
+    }
+
+    // 创建知识库（对接API）
+    async function createKnowledgeBase(name, description, prompt) {
+      try {
+        showLoading("创建知识库中...");
+
+        // 调用API创建知识库
+        const result = await apiRequest('/knowledge', 'POST', {
+          '库名': name,
+          '库描述': description,
+          '提示词': prompt || '你是一个专业的知识库助手，请根据提供的文档内容回答用户的问题。'
+        });
+
+        hideLoading();
+
+        // 刷新知识库列表
+        await loadKnowledgeBases();
+        showNotification('创建成功', `知识库"${name}"已创建`, 'success');
+        return result.id;
+      } catch (err) {
+        hideLoading();
+        console.error('创建知识库失败:', err);
+        return null;
+      }
+    }
+
+    // 删除知识库（对接API）
+    async function deleteKnowledgeBase(id) {
+      try {
+        showLoading("删除知识库中...");
+
+        // 调用API删除知识库
+        await apiRequest('/knowledge', 'DELETE', { 'id': id });
+
+        hideLoading();
+
+        // 刷新知识库列表
+        await loadKnowledgeBases();
+        showNotification('删除成功', '知识库已永久删除', 'info');
+        return true;
+      } catch (err) {
+        hideLoading();
+        console.error('删除知识库失败:', err);
+        return false;
+      }
+    }
+
+    // 上传文件（对接API）
+    async function uploadFileToKnowledge(knowledgeId, file) {
+      try {
+        showLoading("文件上传中...");
+
+        const formData = new FormData();
+        formData.append('knowledge_id', knowledgeId);
+        formData.append('file', file);
+
+        // 调用API上传文件
+        const result = await apiRequest('/upload', 'POST', formData, true);
+
+        hideLoading();
+
+        // 刷新知识库文档计数
+        await loadKnowledgeBases();
+        showNotification('上传成功', `文件"${file.name}"已上传`, 'success');
+        return result.file_id;
+      } catch (err) {
+        hideLoading();
+        console.error('文件上传失败:', err);
+        return null;
+      }
+    }
+
+    // 更新知识库提示词
+    async function updateKnowledgePrompt(knowledgeId, prompt) {
+      try {
+        showLoading("保存提示词中...");
+
+        // 方案1：使用专门的POST接口更新提示词
+        await apiRequest('/knowledge/update_prompt', 'POST', {
+          'id': knowledgeId,
+          'prompt': prompt
+        });
+
+        hideLoading();
+
+        // 更新本地数据
+        const knowledge = knowledgeBases.find(kb => kb._id === knowledgeId);
+        if (knowledge) {
+          knowledge.prompt = prompt;
+        }
+
+        showNotification('保存成功', '提示词已更新', 'success');
+        return true;
+
+      } catch (err) {
+        // 尝试方案2：使用PUT方法
+        try {
+          showLoading("尝试PUT方法保存...");
+          
+          await apiRequest(`/knowledge/${knowledgeId}/prompt`, 'PUT', {
+            'prompt': prompt
+          });
+
+          hideLoading();
+
+          // 更新本地数据
+          const knowledge = knowledgeBases.find(kb => kb._id === knowledgeId);
+          if (knowledge) {
+            knowledge.prompt = prompt;
+          }
+
+          showNotification('保存成功', '提示词已更新', 'success');
+          return true;
+
+        } catch (err2) {
+          hideLoading();
+          console.error('保存提示词失败:', err2);
+          showNotification('保存失败', '无法保存提示词：' + err2.message, 'error');
+          return false;
+        }
+      }
+    }
+
+    // 更新提示词设置区域
+    function updatePromptSettings() {
+      const promptArea = document.getElementById('promptSettingsArea');
+      const promptLabel = document.getElementById('currentKnowledgePromptLabel').querySelector('span');
+      const promptTextarea = document.getElementById('promptTextarea');
+      
+      if (currentKnowledgeBase && knowledgeBases.length > 0) {
+        const currentKB = knowledgeBases.find(kb => kb._id === currentKnowledgeBase);
+        if (currentKB) {
+          promptArea.classList.remove('hidden');
+          promptLabel.textContent = currentKB.name;
+          promptTextarea.value = currentKB.prompt || '你是一个专业的知识库助手，请根据提供的文档内容回答用户的问题。';
+          updatePromptCharCount();
+        } else {
+          promptArea.classList.add('hidden');
+        }
+      } else {
+        promptArea.classList.add('hidden');
+      }
+    }
+
+    // 更新提示词字符计数
+    function updatePromptCharCount() {
+      const textarea = document.getElementById('promptTextarea');
+      const charCount = document.getElementById('promptCharCount');
+      
+      if (!textarea || !charCount) return; // 防止元素不存在时报错
+      
+      const currentLength = textarea.value.length;
+      charCount.textContent = currentLength;
+      
+      // 超过限制时变红
+      if (currentLength > 500) {
+        charCount.classList.add('text-danger');
+      } else {
+        charCount.classList.remove('text-danger');
+      }
+    }
+
+    // 更新添加知识库弹窗中的字符计数
+    function updateAddPromptCharCount() {
+      const textarea = document.getElementById('knowledgePrompt');
+      const charCount = document.getElementById('addPromptCharCount');
+      
+      if (!textarea || !charCount) return; // 防止元素不存在时报错
+      
+      const currentLength = textarea.value.length;
+      charCount.textContent = currentLength;
+      
+      if (currentLength > 500) {
+        charCount.classList.add('text-danger');
+      } else {
+        charCount.classList.remove('text-danger');
+      }
+    }
+
+    // 初始化页面
+    window.addEventListener('DOMContentLoaded', () => {
+      // 加载知识库列表
+      loadKnowledgeBases();
+
+      // 绑定添加知识库按钮事件
+      document.getElementById('addKnowledgeBtn').addEventListener('click', () => {
+        document.getElementById('knowledgeName').value = '';
+        document.getElementById('knowledgeDesc').value = '';
+        // 重置提示词输入框为默认值
+        const defaultPrompt = '你是一个专业的知识库助手，请根据提供的文档内容回答用户的问题。';
+        document.getElementById('knowledgePrompt').value = defaultPrompt;
+        updateAddPromptCharCount();
+        document.getElementById('nameError').classList.add('hidden');
+        document.getElementById('addKnowledgeModal').classList.remove('hidden');
+        setTimeout(() => {
+          document.getElementById('modalContent').classList.remove('scale-95', 'opacity-0');
+          document.getElementById('modalContent').classList.add('scale-100', 'opacity-100');
+        }, 10);
+      });
+
+      // 绑定创建知识库取消按钮事件
+      document.getElementById('cancelCreateBtn').addEventListener('click', () => {
+        document.getElementById('modalContent').classList.remove('scale-100', 'opacity-100');
+        document.getElementById('modalContent').classList.add('scale-95', 'opacity-0');
+        setTimeout(() => {
+          document.getElementById('addKnowledgeModal').classList.add('hidden');
+        }, 300);
+      });
+
+      // 绑定创建知识库确认按钮事件
+      document.getElementById('createKnowledgeBtn').addEventListener('click', async () => {
+        const name = document.getElementById('knowledgeName').value.trim();
+        const desc = document.getElementById('knowledgeDesc').value.trim();
+        const prompt = document.getElementById('knowledgePrompt').value.trim();
+
+        if (!name) {
+          document.getElementById('nameError').classList.remove('hidden');
+          return;
+        }
+
+        // 调用创建知识库函数
+        const knowledgeId = await createKnowledgeBase(name, desc, prompt);
+        if (knowledgeId) {
+          // 关闭弹窗
+          document.getElementById('modalContent').classList.remove('scale-100', 'opacity-100');
+          document.getElementById('modalContent').classList.add('scale-95', 'opacity-0');
+          setTimeout(() => {
+            document.getElementById('addKnowledgeModal').classList.add('hidden');
+          }, 300);
+        }
+      });
+
+      // 绑定文件上传事件
+      document.getElementById('dropArea').addEventListener('click', () => {
+        document.getElementById('fileInput').click();
+      });
+
+      // 拖放上传
+      document.getElementById('dropArea').addEventListener('dragover', (e) => {
+        e.preventDefault();
+        document.getElementById('dropArea').classList.add('border-primary');
+      });
+
+      document.getElementById('dropArea').addEventListener('dragleave', () => {
+        document.getElementById('dropArea').classList.remove('border-primary');
+      });
+
+      document.getElementById('dropArea').addEventListener('drop', (e) => {
+        e.preventDefault();
+        document.getElementById('dropArea').classList.remove('border-primary');
+
+        if (e.dataTransfer.files.length > 0 && currentKnowledgeBase) {
+          uploadFileToKnowledge(currentKnowledgeBase, e.dataTransfer.files[0]);
+        }
+      });
+
+      document.getElementById('fileInput').addEventListener('change', (e) => {
+        if (e.target.files.length > 0 && currentKnowledgeBase) {
+          uploadFileToKnowledge(currentKnowledgeBase, e.target.files[0]);
+          e.target.value = ''; // 重置文件输入，允许重复上传同一文件
+        }
+      });
+
+      // 绑定删除确认事件
+      document.getElementById('confirmDeleteBtn').addEventListener('click', async () => {
+        const knowledgeId = document.getElementById('deleteKnowledgeName').dataset.id;
+        if (knowledgeId) {
+          const success = await deleteKnowledgeBase(knowledgeId);
+          if (success) {
+            closeDeleteConfirmModal();
+          }
+        }
+      });
+
+      // 字符计数
+      document.getElementById('searchInput').addEventListener('input', (e) => {
+        const count = e.target.value.length;
+        document.getElementById('charCount').textContent = count;
+
+        // 限制最大字符数
+        if (count > 500) {
+          e.target.value = e.target.value.substring(0, 500);
+          document.getElementById('charCount').textContent = 500;
+        }
+      });
+
+      // 清空输入框
+      document.getElementById('clearBtn').addEventListener('click', () => {
+        const searchInput = document.getElementById('searchInput');
+        searchInput.value = '';
+        searchInput.focus();
+        document.getElementById('charCount').textContent = '0';
+      });
+
+      // 发送搜索请求（此处仅为示例，实际应根据后端API调整）
+      document.getElementById('searchBtn').addEventListener('click', async () => {
+        const query = document.getElementById('searchInput').value.trim();
+        if (!query || !currentKnowledgeBase) return;
+
+        // 清空输入框
+        document.getElementById('searchInput').value = '';
+        document.getElementById('charCount').textContent = '0';
+
+        // 显示用户输入
+        const conversationContainer = document.getElementById('conversationContainer');
+        const userMessage = document.createElement('div');
+        userMessage.className = 'flex items-start justify-end mb-6';
+        userMessage.innerHTML = `
+          <div class="max-w-[85%]">
+            <div class="bg-primary text-white p-4 message-bubble-right">
+              <p>${query}</p>
+            </div>
+            <span class="text-xs text-gray-400 mr-3 mt-1 block text-right">你</span>
+          </div>
+          <div class="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white ml-3 shadow-md">
+            <i class="fa fa-user text-sm"></i>
+          </div>
+        `;
+        conversationContainer.appendChild(userMessage);
+
+        // 显示加载状态
+        const loadingMessage = document.createElement('div');
+        loadingMessage.className = 'flex items-start mb-6 loading-message';
+        loadingMessage.innerHTML = `
+          <div class="flex-shrink-0 w-8 h-8 rounded-full overflow-hidden shadow-md">
+            <img src="pic/Book.png" alt="智能助手" class="w-full h-full object-cover">
+          </div>
+          <div class="ml-3 max-w-[85%]">
+            <div class="bg-gray-100 p-4 message-bubble-left">
+              <div class="flex space-x-2">
+                <div class="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style="animation-delay: 0ms"></div>
+                <div class="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style="animation-delay: 150ms"></div>
+                <div class="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style="animation-delay: 300ms"></div>
+              </div>
+            </div>
+          </div>
+        `;
+        conversationContainer.appendChild(loadingMessage);
+
+        // 滚动到底部
+        conversationContainer.scrollTop = conversationContainer.scrollHeight;
+
+        try {
+          // 调用后端API获取智能回答
+          const response = await apiRequest('/query', 'POST', {
+            knowledge_base_id: currentKnowledgeBase,
+            query: query
+          });
+
+          // 移除加载状态
+          const loadingMessageEl = document.querySelector('.loading-message');
+          if (loadingMessageEl) {
+            loadingMessageEl.remove();
+          }
+
+          // 优先使用大模型回答，如果没有则使用传统答案
+          let finalAnswer = response.llm_answer || response.answer;
+          
+          // 修复问题3：组合原始文档结果和AI回复
+          let combinedAnswer = '';
+          
+          // 如果有原始文档结果，先显示
+          if (response.answer && response.answer !== response.llm_answer) {
+            combinedAnswer += `<div class="mb-3 p-3 bg-blue-50 border-l-4 border-blue-400 rounded-r">
+              <div class="text-xs font-medium text-blue-700 mb-2 flex items-center">
+                <i class="fa fa-file-text-o mr-1"></i>文档检索结果
+              </div>
+              <div class="text-sm text-blue-800">${response.answer.replace(/\n/g, '<br>')}</div>
+            </div>`;
+          }
+          
+          // 如果有AI回复，再显示
+          if (response.llm_answer) {
+            combinedAnswer += `<div class="p-3 bg-green-50 border-l-4 border-green-400 rounded-r">
+              <div class="text-xs font-medium text-green-700 mb-2 flex items-center">
+                <i class="fa fa-magic mr-1"></i>AI智能回答-基于豆包 1.5Pro模型
+              </div>
+              <div class="text-sm text-green-800">${response.llm_answer.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>')}</div>
+            </div>`;
+          }
+          
+          // 如果都没有，使用默认回答
+          if (!combinedAnswer) {
+            combinedAnswer = finalAnswer.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+          }
+
+          // 获取当前知识库名称用于显示（修复问题4）
+          const currentKB = knowledgeBases.find(kb => kb._id === currentKnowledgeBase);
+          const knowledgeBaseName = currentKB ? currentKB.name : '知识库';
+
+          // 显示AI回答
+          const aiMessage = document.createElement('div');
+          aiMessage.className = 'flex items-start mb-6';
+          aiMessage.innerHTML = `
+            <div class="flex-shrink-0 w-8 h-8 rounded-full overflow-hidden shadow-md">
+              <img src="pic/Book.png" alt="智能助手" class="w-full h-full object-cover">
+            </div>
+            <div class="ml-3 max-w-[85%]">
+              <div class="bg-gray-100 p-4 message-bubble-left">
+                <div class="prose prose-sm max-w-none">
+                  ${combinedAnswer}
+                </div>
+              </div>
+              <span class="text-xs text-gray-400 ml-3 mt-1 block">基于${knowledgeBaseName}库产生的回复</span>
+            </div>
+          `;
+          conversationContainer.appendChild(aiMessage);
+          
+          // 滚动到底部
+          conversationContainer.scrollTop = conversationContainer.scrollHeight;
+
+        } catch (err) {
+          // 移除加载状态
+          const loadingMessageEl = document.querySelector('.loading-message');
+          if (loadingMessageEl) {
+            loadingMessageEl.remove();
+          }
+
+          // 显示错误消息
+          const errorMessage = document.createElement('div');
+          errorMessage.className = 'flex items-start mb-6';
+          
+          // 获取当前知识库名称用于显示错误信息
+          const currentKB = knowledgeBases.find(kb => kb._id === currentKnowledgeBase);
+          const knowledgeBaseName = currentKB ? currentKB.name : '知识库';
+          
+          errorMessage.innerHTML = `
+            <div class="flex-shrink-0 w-8 h-8 rounded-full overflow-hidden shadow-md">
+              <img src="pic/Book.png" alt="智能助手" class="w-full h-full object-cover">
+            </div>
+            <div class="ml-3 max-w-[85%]">
+              <div class="bg-red-50 border border-red-200 p-4 message-bubble-left">
+                <p class="text-red-700">抱歉，查询过程中出现错误：${err.message || '未知错误'}</p>
+                <p class="text-red-600 text-sm mt-2">请检查网络连接或稍后重试。</p>
+              </div>
+              <span class="text-xs text-gray-400 ml-3 mt-1 block">基于${knowledgeBaseName}库产生的回复</span>
+            </div>
+          `;
+          conversationContainer.appendChild(errorMessage);
+          
+          // 滚动到底部
+          conversationContainer.scrollTop = conversationContainer.scrollHeight;
+          
+          showNotification('查询失败', err.message || '无法获取回答，请稍后重试', 'error');
+        }
+      });
+
+      // 按Enter发送消息，Shift+Enter换行
+      document.getElementById('searchInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          document.getElementById('searchBtn').click();
+        }
+      });
+
+      // 提示词相关事件绑定 - 延迟绑定确保元素存在
+      setTimeout(() => {
+        const promptTextarea = document.getElementById('promptTextarea');
+        if (promptTextarea) {
+          promptTextarea.addEventListener('input', updatePromptCharCount);
+          console.log('提示词输入框事件已绑定');
+        } else {
+          console.warn('提示词输入框未找到');
+        }
+        
+        // 确保添加知识库弹窗中的提示词输入框存在后再绑定事件
+        const knowledgePromptTextarea = document.getElementById('knowledgePrompt');
+        if (knowledgePromptTextarea) {
+          knowledgePromptTextarea.addEventListener('input', updateAddPromptCharCount);
+          console.log('添加知识库提示词输入框事件已绑定');
+        } else {
+          console.warn('添加知识库提示词输入框未找到');
+        }
+      }, 100);
+
+      // 保存提示词按钮事件
+      document.getElementById('savePromptBtn').addEventListener('click', async () => {
+        console.log('保存提示词按钮被点击');
+        
+        if (!currentKnowledgeBase) {
+          showNotification('错误', '请先选择一个知识库', 'error');
+          return;
+        }
+        
+        const promptTextarea = document.getElementById('promptTextarea');
+        if (!promptTextarea) {
+          showNotification('错误', '找不到提示词输入框', 'error');
+          return;
+        }
+        
+        const prompt = promptTextarea.value.trim();
+        console.log('当前提示词内容:', prompt);
+        console.log('当前知识库ID:', currentKnowledgeBase);
+        
+        if (prompt.length > 500) {
+          showNotification('错误', '提示词不能超过500个字符', 'error');
+          return;
+        }
+        
+        if (prompt.length === 0) {
+          showNotification('错误', '提示词不能为空', 'error');
+          return;
+        }
+        
+        const success = await updateKnowledgePrompt(currentKnowledgeBase, prompt);
+        if (success) {
+          // 暂时不重新加载，避免丢失用户的修改
+          // await loadKnowledgeBases();
+          console.log('提示词保存成功');
+        }
+      });
+
+      // 重置提示词按钮事件（修复问题2：重置按钮没有反应）
+      document.getElementById('resetPromptBtn').addEventListener('click', async () => {
+        console.log('重置提示词按钮被点击');
+        
+        if (!currentKnowledgeBase) {
+          showNotification('错误', '请先选择一个知识库', 'error');
+          return;
+        }
+        
+        const defaultPrompt = '你是一个专业的知识库助手，请根据提供的文档内容回答用户的问题。';
+        const promptTextarea = document.getElementById('promptTextarea');
+        
+        if (!promptTextarea) {
+          showNotification('错误', '找不到提示词输入框', 'error');
+          return;
+        }
+        
+        // 先在界面上显示重置后的内容
+        promptTextarea.value = defaultPrompt;
+        updatePromptCharCount();
+        
+        console.log('重置后的提示词:', defaultPrompt);
+        console.log('当前知识库ID:', currentKnowledgeBase);
+        
+        // 自动保存重置后的提示词
+        const success = await updateKnowledgePrompt(currentKnowledgeBase, defaultPrompt);
+        if (success) {
+          showNotification('重置成功', '提示词已重置为默认内容', 'success');
+          console.log('提示词重置成功');
+        } else {
+          // 如果保存失败，恢复原来的内容
+          const currentKB = knowledgeBases.find(kb => kb._id === currentKnowledgeBase);
+          if (currentKB && currentKB.prompt) {
+            promptTextarea.value = currentKB.prompt;
+            updatePromptCharCount();
+          }
+        }
+      });
+
+      // 监听知识库切换，更新提示词设置
+      document.addEventListener('knowledgeBaseChanged', () => {
+        updatePromptSettings();
+      });
+    });
+  </script>
+</body>
+
+</html>
